@@ -16,10 +16,10 @@ int main() {
   sr::Camera camera(srmath::Vector4f(2, 2, 5),
                     srmath::Vector4f(0, 0, 0)); // init camera
 
-  //sr::Scene plane("../resources/model/plane.obj");
-  //plane.BindTexture(sr::Texture("../resources/textures/container.jpg"));
-  //plane.SetScale(2);
-  //pipeline.AddToPipeline(plane);
+  sr::Scene plane("../resources/model/plane.obj");
+  plane.BindTexture(sr::Texture("../resources/textures/container.jpg"));
+  plane.SetScale(2);
+  pipeline.AddToPipeline(plane);
 
   sr::Scene cube_model("../resources/model/Crate/crate_tri.obj");
   cube_model.BindTexture(sr::Texture("../resources/textures/tex.jpg"));
