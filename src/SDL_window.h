@@ -59,9 +59,8 @@ public:
 			Tick();
 
 			HandleInput(delta_time);
-
-			pipeline->Clear();
-			pipeline->Render(camera,delta_time);
+			pipeline->Update(camera, delta_time);
+			pipeline->Render();
 
 			surface = SDL_CreateRGBSurfaceFrom(pipeline->GetColorBuffer(), width, height, 24, 3 * width, rmask, gmask, bmask, amask);
 			SDL_SetWindowTitle(window, window_title.c_str());
@@ -77,6 +76,7 @@ public:
 
 			SDL_RenderCopy(renderer, texture, NULL, NULL);
 			SDL_RenderPresent(renderer);
+			pipeline->Clear();
 			SDL_DestroyTexture(texture); // destroy texture to prevent memory leak
 		}
 

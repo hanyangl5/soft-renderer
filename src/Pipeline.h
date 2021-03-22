@@ -58,25 +58,35 @@ public:
 	}
 
 
-
-	void Render(std::shared_ptr<Camera> cam,float delta_time)
-	{
+	void Update(std::shared_ptr<Camera> cam, float delta_time) {
 		//std::cout <<face_count<<", "<< face_culled << "\n";
 		face_culled = 0;
 		view = cam->GetViewMatrix();
+		// light rotate by y
+		glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
+		light.Transform(rot);
+
+		glm::mat4 rot_plane{ glm::rotate(models[0].GetModelMat(), glm::radians(1000.0f * 0.2f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
+	
+		models[0].SetModelMat(rot_plane);
+
+		glm::mat4 rot_crate{ glm::rotate(models[1].GetModelMat(), glm::radians( 1000.0f*0.1f* delta_time), glm::vec3(1.0, 0.0, 0.0)) };
+		models[1].SetModelMat(rot_crate);
+		//models[2].SetModelMat(rot_crate);
+	}
+
+	void Render()
+	{
 		vs_input vsin{};
 		vsin.view = view;
 		ps_input psin{};
 		psin.view = view;
-		glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f* delta_time), glm::vec3(0.0, 1.0, 0.0)) };
-		light.Transform(rot);
+
 		psin.light = light;
-		glm::mat4 rot_crate{ rot * models[0].GetModelMat() };
-		models[0].SetModelMat(rot_crate);
-		//#pragma omp parallel for
 		for (auto& single_model : models) {
 
 			vsin.model = single_model.GetModelMat();
+			//std::cout << vsin.model[0][0]<<"\n";
 			glm::mat4 mvp = projection * view * single_model.GetModelMat();
 			vsin.mvp = mvp;
 			psin.texture = single_model.GetTexture();

@@ -45,7 +45,7 @@ glm::vec3 PixelShader(const ps_input& psin) {
 
 	// compute light in view space, the cam pos is (0,0,0) 
 
-	float ka{ 0.1f }, kd{ 0.5f }, ks{ 0.4f };
+	float ka{ 0.2f }, kd{ 0.5f }, ks{ 0.3f };
 
 	glm::vec3 albedo{ psin.texture->GetColor(psin.uv,0) };
 	glm::vec3 ambient{ ka * albedo };
