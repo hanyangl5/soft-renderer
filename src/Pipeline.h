@@ -1,348 +1,251 @@
 #pragma once
-
-#include "Camera.h"
-#include "DirectLight.h"
-
-#include "Srmath.h"
-#include "Scene.h"
-#include "Texture.h"
-#include "Triangle.h"
-#include "ShaderPayload.h"
-
-
-#include <algorithm> 
-#include <iostream>
-#include <string>
 #include <vector>
+#include <array>
+#include <cstdint>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include "Model.h"
+#include "ShaderStage.h"
+#include "Light.h"
+#include "Camera.h"
+
+class Pipeline
+{
+public:
+	Pipeline(uint32_t w, uint32_t h) : width(w), height(h)
+	{
+		color_buffer.resize(3 * width * height);
+		std::fill(color_buffer.begin(), color_buffer.end(), 0);
+		depth_buffer.resize(width * height);
+		std::fill(depth_buffer.begin(), depth_buffer.end(), 1.0f);
 
 
-namespace sr {
-
-	// rendermodes
-	enum RENDERMODE { WIREFRAME = 1, NORMAL = 2, TEXTURE = 3, PHONG = 4 };
-
-	class Pipeline {
-	private:
-		const unsigned int         width, height;
-		BYTE** frame_buffer{};
-		std::vector<double>        z_buffer;
-		std::vector<Scene*>       object_list;
-		std::vector<DirectLight*> light_list;
-		srmath::Matrix4f             view, projection;
-		Camera cam;
-		int                        rendermode = 0;
-
-	public:
-		Pipeline(HDC screen_dc, unsigned int w, unsigned int h);
-		srmath::Matrix4f GetModelMatrix(const Scene& scene) const;
-		srmath::Matrix4f GetViewMatrix(const Camera& camera) const;
-		srmath::Matrix4f GetPerspectiveProjectionMatrix(const float eye_fov,
-			const float aspect_ratio,
-			const float z_near,
-			const float z_far) const;
-
-		// write color to frame_buffer
-		void SetPixel(const int x, const int y,
-			const srmath::Color& color = { 255, 255, 255 });
-		void DrawLine(int x0, int y0, int x1, int y1, const srmath::Color& color);
-		//void RasterizeScanLine(int x0, int x1, int y, const srmath::Color& color);
-		void RasterizeWireframe(const Triangle& t, const srmath::Color& color);
-		void Draw(const Camera& camera, int _rendermode);
-		void DrawObject(Scene& scene);
-		void ClearBuffer();
-		int  GetIndex(int x, int y);
-		void DrawTriangle(Triangle& t, std::vector<srmath::Vector4f>& view_space_pos,
-			Texture& tex,srmath::Vector4f view_dir);
-		void AddToPipeline(Scene& obj) { object_list.push_back(&obj); }
-		void AddLight(DirectLight& light) { light_list.push_back(&light); }
-		void ClearObject() { object_list.clear(); }
-		void RemoveObject(int index) {
-			if (object_list.size() == 0)
-				return;
-			auto iter = object_list.begin();
-			object_list.erase(iter + index);
-		}
-	};
-
-	// ctor
-	Pipeline::Pipeline(HDC screen_dc, unsigned int w, unsigned int h)
-		: width(w), height(h) {
-
-		BITMAPINFO* Info =
-			(BITMAPINFO*)malloc(sizeof(BITMAPINFOHEADER) + 2 * sizeof(RGBQUAD));
-
-		Info->bmiHeader = { sizeof(BITMAPINFOHEADER),
-						   (int)this->width,
-						   (int)this->height,
-						   1,
-						   32,
-						   BI_RGB,
-						   0,
-						   0,
-						   0,
-						   0,
-						   0 };
-		Info->bmiColors[0].rgbBlue = 0;
-		Info->bmiColors[0].rgbGreen = 0;
-		Info->bmiColors[0].rgbRed = 0;
-		Info->bmiColors[0].rgbReserved = 0;
-		Info->bmiColors[1].rgbBlue = 255;
-		Info->bmiColors[1].rgbGreen = 255;
-		Info->bmiColors[1].rgbRed = 255;
-		Info->bmiColors[1].rgbReserved = 255;
-
-		BYTE* ptr = nullptr;
-
-		static HBITMAP screen_hb =
-			CreateDIBSection(screen_dc, Info, DIB_RGB_COLORS, (void**)&ptr, 0, 0);
-		static HBITMAP screen_ob = (HBITMAP)SelectObject(screen_dc, screen_hb);
-		this->frame_buffer = new BYTE * [height];
-
-		for (unsigned int j = 0; j < this->height; j++) {
-			this->frame_buffer[j] = ptr + this->width * 4 * j;
-		}
-		free(Info);
-		this->z_buffer.resize(this->width * this->height);
-		std::fill(z_buffer.begin(), z_buffer.end(), 1);
+	}
+	~Pipeline()
+	{
 	}
 
-	// clear framebuffer and zbuffer
-	void Pipeline::ClearBuffer() {
-		memset(this->frame_buffer[0], 0, height * 4 * width); // clear framebuffer
-		std::fill(this->z_buffer.begin(), z_buffer.end(), 1); // clear z buffer
-	}
+	void InitAsset() {
 
-	// map x,y to 1 dimension
-	int Pipeline::GetIndex(int x, int y) {
-		int index = y * this->width + x;
-		return (index < 0 || index >(this->height * this->width - 1)) ? 0 : index;
-	}
+		projection = glm::perspective(glm::radians(90.0f), static_cast<float>(width) / height, 0.1f, 100.0f);
+		glm::mat4 id(1.0f);
 
-	// model mat
-	srmath::Matrix4f Pipeline::GetModelMatrix(const Scene& scene) const {
-		return scene.GetModelMatrix();
-	}
-
-	// view mat
-	srmath::Matrix4f Pipeline::GetViewMatrix(const Camera& camera) const {
-		return camera.GetViewMatrix();
-	}
-
-	// projection mat (perspective)
-	srmath::Matrix4f Pipeline::GetPerspectiveProjectionMatrix(
-		const float eye_fov, const float aspect_ratio, const float z_near,
-		const float z_far) const {
-		srmath::Matrix4f projection;
-		projection.SetZero();
-		auto fax = 1.0f / (tan(eye_fov * 0.5f));
-		// std::cout << fax;
-		projection.e[0][0] = fax / aspect_ratio;
-		projection.e[1][1] = fax;
-		projection.e[2][2] = -(z_far + z_near) / (z_far - z_near);
-		projection.e[2][3] = -2 * z_near * z_far / (z_far - z_near);
-		projection.e[3][2] = -1;
-		return projection;
-	}
-
-	// write color to frame_buffer
-	void Pipeline::SetPixel(const int x, const int y, const srmath::Color& color) {
-		if (x <= this->width - 1 && y <= this->height - 1) {
-			BYTE* p = &frame_buffer[y][x * 4];
-			*p = color.z;
-			*(p + 1) = color.y;
-			*(p + 2) = color.x;
-		}
-	}
-
-	//  draw line
-	void Pipeline::DrawLine(int x0, int y0, int x1, int y1,
-		const srmath::Color& color) {
-		int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-		int dy = abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-		int err = (dx > dy ? dx : -dy) / 2, e2;
-		for (;;) {
-			SetPixel(x0, y0, color);
-			if (x0 == x1 && y0 == y1)
-				break;
-			e2 = err;
-			if (e2 > -dx) {
-				err -= dy;
-				x0 += sx;
-			}
-			if (e2 < dy) {
-				err += dx;
-				y0 += sy;
-			}
-		}
-	}
-
-	// draw wireframe
-	void Pipeline::RasterizeWireframe(const Triangle& t,
-		const srmath::Color& color = { 255, 255, 255 }) {
-		DrawLine(t.vertex[0].x, t.vertex[0].y, t.vertex[1].x, t.vertex[1].y, color);
-		DrawLine(t.vertex[1].x, t.vertex[1].y, t.vertex[2].x, t.vertex[2].y, color);
-		DrawLine(t.vertex[2].x, t.vertex[2].y, t.vertex[0].x, t.vertex[0].y, color);
-	}
-
-	// draw
-	void Pipeline::Draw(const Camera& camera, int _rendermode) {
-		this->rendermode = _rendermode;
-		if (object_list.size() == 0)
-			return;
-		cam = camera;
-		view = this->GetViewMatrix(camera);
-		projection = GetPerspectiveProjectionMatrix(
-			90 * _PI / 180, (float)this->width / this->height, 0.01, 1000);
-		for (auto& obj : this->object_list) {
-			DrawObject(*obj);
-		}
-	}
-
-	// draw single object in pipeline
-	void Pipeline::DrawObject(Scene& obj) {
-		srmath::Matrix4f model = obj.GetModelMatrix();
-		srmath::Matrix4f mvp = projection * view * model;
-		srmath::Matrix4f mv = view * model;
+		Model plane("../resources/model/plane/plane.obj");
+		plane.BindTexture("../resources/model/plane/container.jpg");
+		glm::mat4 plane_t{ glm::translate(id, glm::vec3(1.0f, -2.0f, 0.0f)) };
+		plane.SetModelMat(plane_t);
 
 
-		srmath::Vector4f view_dir=mv*cam.GetDirection();
-		for (auto& i : obj.triangle_list) {
+		Model backpack("../resources/model/backpack/backpack.obj");
+		backpack.BindTexture("../resources/model/backpack/diffuse.jpg");
+		glm::mat4 backpack_t{ glm::translate(id, glm::vec3(4.0f, 0.0f, 0.0f)) };
+		//backpack_t = { glm::scale(backpack_t,glm::vec3(0.5,0.5,0.5)) };
+		backpack.SetModelMat(backpack_t);
 
-			// vertex translations
-			std::vector<srmath::Vector4f> v{ mvp * i->vertex[0], mvp * i->vertex[1],
-										  mvp * i->vertex[2] };
+		Model crate("../resources/model/Crate/crate_tri.obj");
+		crate.BindTexture("../resources/model/Crate/crate_1.jpg");
+		//glm::mat4 crate_t{ glm::scale(id,glm::vec3(0.5,0.5,0.5)) };
+		//crate.SetModelMat(crate_t);
 
-			// view space position
-			std::vector<srmath::Vector4f> view_space_pos{
-			  mv * i->vertex[0], mv * i->vertex[1], mv * i->vertex[2] };
 
-			// perspective division and screen mapping
-			for (auto& vert : v) {
-				vert.x /= vert.w;
-				vert.y /= vert.w;
-				vert.z /= vert.w;
-				vert.z = 0.5 * (vert.z + 1.0);
-				vert.x = 0.5 * this->width * (vert.x + 1.0);
-				vert.y = 0.5 * this->height * (vert.y + 1.0);
-			}
 
-			// set triangle
-			Triangle t;
 
-			// tex mapping correction
-			t.SetTexcoord(i->tex_coords[0] / v[0].w, i->tex_coords[1] / v[1].w,
-				i->tex_coords[2] / v[2].w);
-			v[0].w = 1 / v[0].w;
-			v[1].w = 1 / v[1].w;
-			v[2].w = 1 / v[2].w;
-			t.SetVertex(v[0], v[1], v[2]);
-			t.SetNormal(mv * i->normal[0], mv * i->normal[1], mv * i->normal[2]);
-			t.SetColor(i->color[0], i->color[1], i->color[2]);
-
-			// back face culling
-			srmath::Vector4f normal = srmath::cross(v[1] - v[0], v[2] - v[0]);
-			if (srmath::dot(srmath::Vector4f{ 0, 0, 1 }, normal) < 0) {
-				continue;
-			}
-			if (this->rendermode == WIREFRAME) {
-				RasterizeWireframe(t);
-			}
-			else
-				DrawTriangle(t, view_space_pos, obj.texture,view_dir);
-		}
+		models.push_back(plane);
+		models.push_back(crate);
+		models.push_back(backpack);
+		for (auto model : models) { face_count += model.GetTriangleCount(); }
 	}
 
 
-	// compute barycentric coodinate
-	srmath::Vector4f computeBarycentric2D(float x, float y, const sr::Triangle& v) {
 
-		srmath::Vector4f u = srmath::cross(
-			srmath::Vector4f(v.vertex[2].x - v.vertex[0].x, v.vertex[1].x - v.vertex[0].x,
-				v.vertex[0].x - x),
-			srmath::Vector4f(v.vertex[2].y - v.vertex[0].y, v.vertex[1].y - v.vertex[0].y,
-				v.vertex[0].y - y));
-		if (std::abs(u.z) < 1)
-			return srmath::Vector4f(-1, 1, 1);
-		return srmath::Vector4f(1.f - (u.x + u.y) / u.z, u.y / u.z, u.x / u.z);
-	}
+	void Render(std::shared_ptr<Camera> cam,float delta_time)
+	{
+		//std::cout <<face_count<<", "<< face_culled << "\n";
+		face_culled = 0;
+		view = cam->GetViewMatrix();
+		vs_input vsin{};
+		vsin.view = view;
+		ps_input psin{};
+		psin.view = view;
+		glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f* delta_time), glm::vec3(0.0, 1.0, 0.0)) };
+		light.Transform(rot);
+		psin.light = light;
+		glm::mat4 rot_crate{ rot * models[0].GetModelMat() };
+		models[0].SetModelMat(rot_crate);
+		//#pragma omp parallel for
+		for (auto& single_model : models) {
 
-	void Pipeline::DrawTriangle(Triangle& v,
-		std::vector<srmath::Vector4f>& view_space_pos,
-		Texture& tex, srmath::Vector4f view_dir) {
+			vsin.model = single_model.GetModelMat();
+			glm::mat4 mvp = projection * view * single_model.GetModelMat();
+			vsin.mvp = mvp;
+			psin.texture = single_model.GetTexture();
 
-		// calculate bounding box
-		float max_x = std::max({ v.vertex[0].x, v.vertex[1].x, v.vertex[2].x });
-		float max_y = std::max({ v.vertex[0].y, v.vertex[1].y, v.vertex[2].y });
-		float min_x = std::min({ v.vertex[0].x, v.vertex[1].x, v.vertex[2].x });
-		float min_y = std::min({ v.vertex[0].y, v.vertex[1].y, v.vertex[2].y });
+			for (auto& triangle : single_model.GetTriangleList()) {
+				// geometry transformation
+				//vs_input vsin{};
+				vsin.vertex = { triangle.GetPos(0), triangle.GetPos(1), triangle.GetPos(2) };
+				vsin.normal = { triangle.GetNormal(0),triangle.GetNormal(1) ,triangle.GetNormal(2) };
+				vsin.uv = { triangle.GetTexcoord(0),triangle.GetTexcoord(1),triangle.GetTexcoord(2) };
 
-		for (int i = min_x; i < max_x; i++) {
-			for (int j = min_y; j < max_y; j++) {
-				// compute barycentric coodinate
-				srmath::Vector4f bc_screen = computeBarycentric2D(i, j, v);
+				vs_output vso{ VertexShader(vsin) };
 
-				if (bc_screen.x < 0 || bc_screen.y < 0 || bc_screen.z < 0)
-					continue;
+				if (!Clipping(vso))continue;
+				PerspectiveDivision(vso);
+				if (!CullBackFace(vso))continue;
+				ScreenMapping(vso);
+				PerspectiveCorrection(vso);
 
-				float zp = v.vertex[0].z * bc_screen.x + v.vertex[1].z * bc_screen.y +
-					v.vertex[2].z * bc_screen.z;
 
-				if (zp < z_buffer[GetIndex(i, j)]) {
-					this->z_buffer[GetIndex(i, j)] = zp;
+				// rasterize and pixel processing
+				uint32_t max_x = std::max({ vso.pos[0].x, vso.pos[1].x, vso.pos[2].x });
+				uint32_t max_y = std::max({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
+				uint32_t min_x = std::min({ vso.pos[0].x, vso.pos[1].x, vso.pos[2].x });
+				uint32_t min_y = std::min({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
+				
+				for (uint32_t i = min_x; i <= max_x; ++i) {
+					for (uint32_t j = min_y; j <= max_y; ++j) {
+						std::array<float, 3> bc_coord{ ComputeBC(i + 0.5, j + 0.5, vso.pos) };
 
-					float w =
-						1.0f / (v.vertex[0].w * bc_screen.x + v.vertex[1].w * bc_screen.y +
-							v.vertex[2].w * bc_screen.z);
+						if (bc_coord[0] < 0 ||bc_coord[1] < 0 ||bc_coord[2] < 0)
+							continue; // not inside the triangle
 
-					// interpolations of color/normal/viewpos/texcoord
-					auto color_interp{ bc_screen.x * v.color[0] + bc_screen.y * v.color[1] +
-									  bc_screen.z * v.color[2] };
+						float zp{ bc_coord[0] * vso.pos[0].z + bc_coord[1] * vso.pos[1].z + bc_coord[2] * vso.pos[2].z };
+						if (zp > depth_buffer[j * width + i])
+							continue;							// depth test
+						this->depth_buffer[j * width + i] = zp; // depth write
 
-					auto normal_interp =
-						w * (bc_screen.x * v.normal[0] + bc_screen.y * v.normal[1] +
-							bc_screen.z * v.normal[2]);
+						// interp attribute
 
-					// texture mapping correction
-					auto view_pos_interp = w * (bc_screen.x * view_space_pos[0] +
-						bc_screen.y * view_space_pos[1] +
-						bc_screen.z * view_space_pos[2]);
-
-					auto texcoord_interp =
-						w * (bc_screen.x * v.tex_coords[0] + bc_screen.y * v.tex_coords[1] +
-							bc_screen.z * v.tex_coords[2]);
-
-					fragment_shader_payload pl(color_interp, normal_interp, texcoord_interp,
-						&tex);
-					
-					pl.view_pos = view_pos_interp;
-					pl.view_dir = view_dir;
-					// translate light dirction
-					for (auto& li : light_list) {
-						srmath::Vector4f dir = view * li->GetDir();
-						srmath::Color    col = li->GetColor();
-						DirectLight    a(dir, col);
-						pl.light_list.push_back(&a);
+						float w =  1.0f/(vso.pos[0].w * bc_coord[0] + vso.pos[1].w * bc_coord[1] + vso.pos[2].w * bc_coord[2]);
+						//std::cout << w << "\n";
+						glm::vec4 interp_view_normal{  w*(vso.view_normal[0] * bc_coord[0] + vso.view_normal[1] * bc_coord[1] + vso.view_normal[2] * bc_coord[2]) };
+						glm::vec4 interp_view_pos{   w*(vso.view_pos[0] * bc_coord[0] + vso.view_pos[1] * bc_coord[1] + vso.view_pos[2] * bc_coord[2]) };
+						glm::vec2 interp_uv = { w*(vso.uv[0] * bc_coord[0] + vso.uv[1] * bc_coord[1] + vso.uv[2] * bc_coord[2]) };
+						
+						// pixel processing
+						psin.view_pos = interp_view_pos;
+						psin.view_normal = interp_view_normal;
+						psin.uv = interp_uv;
+						auto result_color = PixelShader(psin);
+						std::array<unsigned char, 3> res{
+							static_cast<unsigned char>(result_color[0] * 255), 
+							static_cast<unsigned char>(result_color[1] * 255),
+							static_cast<unsigned char>(result_color[2] * 255)};
+						SetPixel(i, j, res);
 					}
-					srmath::Color pixel_color;
-
-					// fragment shader to compute pixel color
-					switch (rendermode) {
-					case TEXTURE:
-						pixel_color = sr::texture_shader(pl);
-						break;
-					case NORMAL:
-						pixel_color = sr::normal_shader(pl);
-						break;
-					case PHONG:
-						pixel_color = sr::phong_shader(pl);
-						break;
-					default:
-						break;
-					}
-					SetPixel(i, j, pixel_color);
 				}
 			}
 		}
 	}
 
-} // namespace sr
+	void Clear() {
+		std::fill(color_buffer.begin(), color_buffer.end(), 0);
+		std::fill(depth_buffer.begin(), depth_buffer.end(), 1.0f);
+	}
+	void* GetColorBuffer()
+	{
+		return color_buffer.data();
+	}
+	auto GetInfo() {
+		return face_count, face_culled;
+	}
+
+private:
+
+
+	bool CullBackFace(const vs_output& vso) {
+
+		glm::vec3 v1{ glm::vec3(vso.pos[0]) };
+		glm::vec3 v2{ glm::vec3(vso.pos[1]) };
+		glm::vec3 v3{ glm::vec3(vso.pos[2]) };
+
+		glm::vec3 ab{ v1 - v2 };
+		glm::vec3 bc{ v2 - v3 };
+		glm::vec3 view_normal(glm::cross(ab, bc));
+		if (glm::dot(view_normal, glm::vec3(0, 0, 1)) <= 0) {
+			face_culled++;
+			return false;
+		}
+		return true;
+
+	}
+	bool Clipping(const vs_output& vso)
+	{
+
+		for (auto& i : vso.pos) {
+			// check the triangle is inside the frustum
+			if (i.x > i.w || i.x<-i.w || i.y>i.w || i.y<-i.w || i.z>i.w || i.z < -i.w) {
+				return false;
+			}
+		}
+		return true;
+	}
+	void PerspectiveDivision(vs_output& vso)
+	{
+		for (auto& i : vso.pos) {
+			i.x /= i.w;
+			i.y /= i.w;
+			i.z /= i.w;
+		}
+
+
+	}
+	void ScreenMapping(vs_output& vso)
+	{
+		for (auto& i : vso.pos) {
+			i.z = 0.5 * i.z + 0.5;
+			i.x = width * (i.x * 0.5 + 0.5);
+			i.y = 0.5 * height - 0.5 * height * i.y;
+		}
+	}
+	void PerspectiveCorrection(vs_output& vso) {
+
+		for (uint32_t i = 0; i < 3; ++i) {
+			vso.view_normal[i] /= vso.pos[i].w;
+			vso.view_pos[i] /= vso.pos[i].w;
+			vso.uv[i] /= vso.pos[i].w;
+			vso.pos[i].w = 1.0f / vso.pos[i].w;
+		}
+	}
+
+	std::array<float, 3> ComputeBC(float x, float y, std::array<glm::vec4, 3> tri)
+	{
+		glm::vec2 v0{ tri[1] - tri[0] };			  //b-a
+		glm::vec2 v1{ tri[2] - tri[0] };			  //c-a
+		glm::vec2 v2{ x - tri[0].x, y - tri[0].y }; //p-a
+
+		//Vector v0 = b - a, v1 = c - a, v2 = p - a;
+		float d00 = glm::dot(v0, v0);
+		float d01 = glm::dot(v0, v1);
+		float d11 = glm::dot(v1, v1);
+		float d20 = glm::dot(v2, v0);
+		float d21 = glm::dot(v2, v1);
+		float denom = d00 * d11 - d01 * d01;
+		float v = (d11 * d20 - d01 * d21) / denom;
+		float w = (d00 * d21 - d01 * d20) / denom;
+		float u = 1.0f - v - w;
+
+		return std::array<float, 3>{u,v, w};
+
+
+
+	}
+
+	void SetPixel(uint32_t x, uint32_t y, std::array<unsigned char, 3> color)
+	{
+		color_buffer[3 * (y * width + x) + 0] = color[0];
+		color_buffer[3 * (y * width + x) + 1] = color[1];
+		color_buffer[3 * (y * width + x) + 2] = color[2];
+	}
+
+private:
+	uint32_t width{}, height{};
+	std::vector<unsigned char> color_buffer{};
+	std::vector<float> depth_buffer{};
+	glm::mat4 view{}, projection{};
+	std::vector<Model> models{};
+	DirectLight light{ glm::vec4(0.0f,-0.3f,-1.0f,0.0f),glm::vec3(1.0f,1.0f,1.0f) };
+
+	uint32_t  face_count{ 0 }, face_culled{ 0 };
+};
