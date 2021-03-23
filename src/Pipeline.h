@@ -2,6 +2,7 @@
 #include <vector>
 #include <array>
 #include <cstdint>
+#include <omp.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -9,6 +10,7 @@
 #include "ShaderStage.h"
 #include "Light.h"
 #include "Camera.h"
+#include <omp.h>
 
 class Pipeline
 {
@@ -48,12 +50,15 @@ public:
 		//glm::mat4 crate_t{ glm::scale(id,glm::vec3(0.5,0.5,0.5)) };
 		//crate.SetModelMat(crate_t);
 
+		Model sphere("../resources/model/sphere/sphere.obj");
+		sphere.BindTexture("../resources/model/sphere/rustediron2_basecolor.png");
 
 
 
-		models.push_back(plane);
+		//models.push_back(plane);
 		models.push_back(crate);
-		models.push_back(backpack);
+		//models.push_back(backpack);
+		//models.push_back(sphere);
 		for (auto model : models) { face_count += model.GetTriangleCount(); }
 	}
 
@@ -63,15 +68,15 @@ public:
 		face_culled = 0;
 		view = cam->GetViewMatrix();
 		// light rotate by y
-		glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
-		light.Transform(rot);
+		//glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
+		//light.Transform(rot);
 
-		glm::mat4 rot_plane{ glm::rotate(models[0].GetModelMat(), glm::radians(1000.0f * 0.2f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
+		//glm::mat4 rot_plane{ glm::rotate(models[0].GetModelMat(), glm::radians(1000.0f * 0.2f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
 	
-		models[0].SetModelMat(rot_plane);
+		//models[0].SetModelMat(rot_plane);
 
-		glm::mat4 rot_crate{ glm::rotate(models[1].GetModelMat(), glm::radians( 1000.0f*0.1f* delta_time), glm::vec3(1.0, 0.0, 0.0)) };
-		models[1].SetModelMat(rot_crate);
+		//glm::mat4 rot_crate{ glm::rotate(models[1].GetModelMat(), glm::radians( 1000.0f*0.1f* delta_time), glm::vec3(1.0, 0.0, 0.0)) };
+		//models[1].SetModelMat(rot_crate);
 		//models[2].SetModelMat(rot_crate);
 	}
 
@@ -83,6 +88,7 @@ public:
 		psin.view = view;
 
 		psin.light = light;
+
 		for (auto& single_model : models) {
 
 			vsin.model = single_model.GetModelMat();
@@ -108,13 +114,16 @@ public:
 
 
 				// rasterize and pixel processing
-				uint32_t max_x = std::max({ vso.pos[0].x, vso.pos[1].x, vso.pos[2].x });
-				uint32_t max_y = std::max({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
-				uint32_t min_x = std::min({ vso.pos[0].x, vso.pos[1].x, vso.pos[2].x });
-				uint32_t min_y = std::min({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
-				
-				for (uint32_t i = min_x; i <= max_x; ++i) {
-					for (uint32_t j = min_y; j <= max_y; ++j) {
+
+				int32_t max_x = std::max({ vso.pos[0].x, vso.pos[1].x, vso.pos[2].x });
+				int32_t max_y = std::max({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
+				int32_t min_x = std::min({ vso.pos[0].x, vso.pos[1].x, vso.pos[2].x });
+				int32_t min_y = std::min({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
+
+//#pragma omp critical
+
+				for (int32_t i = min_x; i <= max_x; ++i) {
+					for (int32_t j = min_y; j <= max_y; ++j) {
 						std::array<float, 3> bc_coord{ ComputeBC(i + 0.5, j + 0.5, vso.pos) };
 
 						if (bc_coord[0] < 0 ||bc_coord[1] < 0 ||bc_coord[2] < 0)
@@ -129,19 +138,28 @@ public:
 
 						float w =  1.0f/(vso.pos[0].w * bc_coord[0] + vso.pos[1].w * bc_coord[1] + vso.pos[2].w * bc_coord[2]);
 						//std::cout << w << "\n";
-						glm::vec4 interp_view_normal{  w*(vso.view_normal[0] * bc_coord[0] + vso.view_normal[1] * bc_coord[1] + vso.view_normal[2] * bc_coord[2]) };
-						glm::vec4 interp_view_pos{   w*(vso.view_pos[0] * bc_coord[0] + vso.view_pos[1] * bc_coord[1] + vso.view_pos[2] * bc_coord[2]) };
+						glm::vec3 interp_view_normal{  w*(vso.view_normal[0] * bc_coord[0] + vso.view_normal[1] * bc_coord[1] + vso.view_normal[2] * bc_coord[2]) };
+						glm::vec3 interp_view_pos{   w*(vso.view_pos[0] * bc_coord[0] + vso.view_pos[1] * bc_coord[1] + vso.view_pos[2] * bc_coord[2]) };
 						glm::vec2 interp_uv = { w*(vso.uv[0] * bc_coord[0] + vso.uv[1] * bc_coord[1] + vso.uv[2] * bc_coord[2]) };
 						
 						// pixel processing
 						psin.view_pos = interp_view_pos;
 						psin.view_normal = interp_view_normal;
 						psin.uv = interp_uv;
-						auto result_color = PixelShader(psin);
+						auto result_color = PixelShader(psin,0);
+
+
+						//clamp to 0,1
+						result_color[0] = result_color[0] > 1.0f ? 1.0f : result_color[0];
+						result_color[1] = result_color[1] > 1.0f ? 1.0f : result_color[1];
+						result_color[2] = result_color[2] > 1.0f ? 1.0f : result_color[2];
 						std::array<unsigned char, 3> res{
 							static_cast<unsigned char>(result_color[0] * 255), 
 							static_cast<unsigned char>(result_color[1] * 255),
 							static_cast<unsigned char>(result_color[2] * 255)};
+						
+						
+						//if (result_color[0] > 255|| result_color[1] > 255|| result_color[2] > 255)std::cout << "test";
 						SetPixel(i, j, res);
 					}
 				}
@@ -255,7 +273,8 @@ private:
 	std::vector<float> depth_buffer{};
 	glm::mat4 view{}, projection{};
 	std::vector<Model> models{};
-	DirectLight light{ glm::vec4(0.0f,-0.3f,-1.0f,0.0f),glm::vec3(1.0f,1.0f,1.0f) };
+	// pos, dir, color
+	DirectLight light{ glm::vec4{0.0f,1.0f,-1.0f,1.0f}, glm::vec4(0.0f,-0.3f,-1.0f,0.0f),2.0f*glm::vec3(1.0f,0.956f,0.8392f) };
 
 	uint32_t  face_count{ 0 }, face_culled{ 0 };
 };
