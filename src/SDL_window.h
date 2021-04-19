@@ -62,6 +62,7 @@ public:
 			pipeline->Update(camera, delta_time);
 			pipeline->Render();
 
+			
 			surface = SDL_CreateRGBSurfaceFrom(pipeline->GetColorBuffer(), width, height, 24, 3 * width, rmask, gmask, bmask, amask);
 			SDL_SetWindowTitle(window, window_title.c_str());
 			if (!surface) {
@@ -78,6 +79,7 @@ public:
 			SDL_RenderPresent(renderer);
 			pipeline->Clear();
 			SDL_DestroyTexture(texture); // destroy texture to prevent memory leak
+			SDL_FreeSurface(surface);
 		}
 
 	}
@@ -89,7 +91,7 @@ private:
 		LAST = NOW;
 		NOW = SDL_GetPerformanceCounter();
 		delta_time = (double)((NOW - LAST) / (double)SDL_GetPerformanceFrequency());
-		window_title = std::to_string(1.0f / delta_time);
+		window_title = std::to_string(delta_time*1000);
 		//std::cout << delta_time << "\n";
 	}
 	void HandleInput(float deltaTime)

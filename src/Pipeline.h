@@ -47,17 +47,16 @@ public:
 
 		Model crate("../resources/model/Crate/crate_tri.obj");
 		crate.BindTexture("../resources/model/Crate/crate_1.jpg");
-		//glm::mat4 crate_t{ glm::scale(id,glm::vec3(0.5,0.5,0.5)) };
-		//crate.SetModelMat(crate_t);
+		crate.SetModelMat(glm::translate(id, glm::vec3(0.0f, 2.0f, 0.0f)));
 
 		Model sphere("../resources/model/sphere/sphere.obj");
 		sphere.BindTexture("../resources/model/sphere/rustediron2_basecolor.png");
 
 
 
-		//models.push_back(plane);
+		models.push_back(plane);
 		models.push_back(crate);
-		//models.push_back(backpack);
+		models.push_back(backpack);
 		//models.push_back(sphere);
 		for (auto model : models) { face_count += model.GetTriangleCount(); }
 	}
@@ -68,8 +67,8 @@ public:
 		face_culled = 0;
 		view = cam->GetViewMatrix();
 		// light rotate by y
-		//glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
-		//light.Transform(rot);
+		glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
+		//plight.Transform(rot);
 
 		//glm::mat4 rot_plane{ glm::rotate(models[0].GetModelMat(), glm::radians(1000.0f * 0.2f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
 	
@@ -85,9 +84,9 @@ public:
 		vs_input vsin{};
 		vsin.view = view;
 		ps_input psin{};
-		psin.view = view;
-
-		psin.light = light;
+		psin.light_color = plight.Color();
+		psin.view_light_pos = view * plight.ModelMat() * plight.Pos();
+		
 
 		for (auto& single_model : models) {
 
@@ -96,7 +95,7 @@ public:
 			glm::mat4 mvp = projection * view * single_model.GetModelMat();
 			vsin.mvp = mvp;
 			psin.texture = single_model.GetTexture();
-
+#pragma omp parallel for
 			for (auto& triangle : single_model.GetTriangleList()) {
 				// geometry transformation
 				//vs_input vsin{};
@@ -120,7 +119,6 @@ public:
 				int32_t min_x = std::min({ vso.pos[0].x, vso.pos[1].x, vso.pos[2].x });
 				int32_t min_y = std::min({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
 
-//#pragma omp critical
 
 				for (int32_t i = min_x; i <= max_x; ++i) {
 					for (int32_t j = min_y; j <= max_y; ++j) {
@@ -146,7 +144,7 @@ public:
 						psin.view_pos = interp_view_pos;
 						psin.view_normal = interp_view_normal;
 						psin.uv = interp_uv;
-						auto result_color = PixelShader(psin,0);
+						auto result_color = PixelShader(psin);
 
 
 						//clamp to 0,1
@@ -274,7 +272,7 @@ private:
 	glm::mat4 view{}, projection{};
 	std::vector<Model> models{};
 	// pos, dir, color
-	DirectLight light{ glm::vec4{0.0f,1.0f,-1.0f,1.0f}, glm::vec4(0.0f,-0.3f,-1.0f,0.0f),2.0f*glm::vec3(1.0f,0.956f,0.8392f) };
-
+	//DirectLight light{ glm::vec4{0.0f,1.0f,-1.0f,1.0f}, glm::vec4(0.0f,-0.3f,-1.0f,0.0f),2.0f*glm::vec3(1.0f,0.956f,0.8392f) };
+	PointLight plight{ glm::vec4(0.0f,5.0f,5.0f,1.0f),glm::vec3(1.0f,0.956f,0.8392f) };
 	uint32_t  face_count{ 0 }, face_culled{ 0 };
 };
