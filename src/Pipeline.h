@@ -57,7 +57,7 @@ public:
 		models.push_back(plane);
 		models.push_back(crate);
 		models.push_back(backpack);
-		//models.push_back(sphere);
+		models.push_back(sphere);
 		for (auto model : models) { face_count += model.GetTriangleCount(); }
 	}
 
@@ -68,10 +68,11 @@ public:
 		view = cam->GetViewMatrix();
 		// light rotate by y
 		glm::mat4 rot{ glm::rotate(glm::mat4(1.0f), glm::radians(0.02f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
-		//plight.Transform(rot);
+		light.Transform(rot);
+		//plight.SetRot(rot);
 
 		//glm::mat4 rot_plane{ glm::rotate(models[0].GetModelMat(), glm::radians(1000.0f * 0.2f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
-	
+
 		//models[0].SetModelMat(rot_plane);
 
 		//glm::mat4 rot_crate{ glm::rotate(models[1].GetModelMat(), glm::radians( 1000.0f*0.1f* delta_time), glm::vec3(1.0, 0.0, 0.0)) };
@@ -84,9 +85,9 @@ public:
 		vs_input vsin{};
 		vsin.view = view;
 		ps_input psin{};
-		psin.light_color = plight.Color();
-		psin.view_light_pos = view * plight.ModelMat() * plight.Pos();
-		
+		psin.light_color = light.Color();
+		//psin.view_light_pos = view * plight.Pos();
+		psin.view_light_dir = view * light.Dir();
 
 		for (auto& single_model : models) {
 
@@ -95,19 +96,21 @@ public:
 			glm::mat4 mvp = projection * view * single_model.GetModelMat();
 			vsin.mvp = mvp;
 			psin.texture = single_model.GetTexture();
-#pragma omp parallel for
-			for (auto& triangle : single_model.GetTriangleList()) {
-				// geometry transformation
-				//vs_input vsin{};
-				vsin.vertex = { triangle.GetPos(0), triangle.GetPos(1), triangle.GetPos(2) };
-				vsin.normal = { triangle.GetNormal(0),triangle.GetNormal(1) ,triangle.GetNormal(2) };
-				vsin.uv = { triangle.GetTexcoord(0),triangle.GetTexcoord(1),triangle.GetTexcoord(2) };
+			auto tri_list = single_model.GetTriangleList();
+			for (int32_t y = 0; y < tri_list.size(); y++) {
+				
+				vsin.vertex = { tri_list[y].GetPos(0), tri_list[y].GetPos(1),tri_list[y].GetPos(2) };
+				vsin.normal = { tri_list[y].GetNormal(0),tri_list[y].GetNormal(1) ,tri_list[y].GetNormal(2) };
+				vsin.uv = { tri_list[y].GetTexcoord(0),tri_list[y].GetTexcoord(1),tri_list[y].GetTexcoord(2) };
 
+				// model space to clip space
 				vs_output vso{ VertexShader(vsin) };
-
+				// clipping
 				if (!Clipping(vso))continue;
+				// clip to ndc
 				PerspectiveDivision(vso);
 				if (!CullBackFace(vso))continue;
+				// viewport transformation
 				ScreenMapping(vso);
 				PerspectiveCorrection(vso);
 
@@ -120,48 +123,39 @@ public:
 				int32_t min_y = std::min({ vso.pos[0].y, vso.pos[1].y, vso.pos[2].y });
 
 
-				for (int32_t i = min_x; i <= max_x; ++i) {
-					for (int32_t j = min_y; j <= max_y; ++j) {
-						std::array<float, 3> bc_coord{ ComputeBC(i + 0.5, j + 0.5, vso.pos) };
+					for (int32_t i = min_x; i <= max_x; ++i) {
+						for (int32_t j = min_y; j <= max_y; ++j) {
 
-						if (bc_coord[0] < 0 ||bc_coord[1] < 0 ||bc_coord[2] < 0)
-							continue; // not inside the triangle
+							glm::vec3 bc_coord{ ComputeBC(i + 0.5, j + 0.5, vso.pos) };
 
-						float zp{ bc_coord[0] * vso.pos[0].z + bc_coord[1] * vso.pos[1].z + bc_coord[2] * vso.pos[2].z };
-						if (zp > depth_buffer[j * width + i])
-							continue;							// depth test
-						this->depth_buffer[j * width + i] = zp; // depth write
+							if (bc_coord[0] < 0 || bc_coord[1] < 0 || bc_coord[2] < 0)
+								continue; // not inside the triangle
 
-						// interp attribute
+							float zp{ bc_coord[0] * vso.pos[0].z + bc_coord[1] * vso.pos[1].z + bc_coord[2] * vso.pos[2].z };
+							if (zp > depth_buffer[j * width + i])
+								continue;							// depth test
+							this->depth_buffer[j * width + i] = zp; // depth write
 
-						float w =  1.0f/(vso.pos[0].w * bc_coord[0] + vso.pos[1].w * bc_coord[1] + vso.pos[2].w * bc_coord[2]);
-						//std::cout << w << "\n";
-						glm::vec3 interp_view_normal{  w*(vso.view_normal[0] * bc_coord[0] + vso.view_normal[1] * bc_coord[1] + vso.view_normal[2] * bc_coord[2]) };
-						glm::vec3 interp_view_pos{   w*(vso.view_pos[0] * bc_coord[0] + vso.view_pos[1] * bc_coord[1] + vso.view_pos[2] * bc_coord[2]) };
-						glm::vec2 interp_uv = { w*(vso.uv[0] * bc_coord[0] + vso.uv[1] * bc_coord[1] + vso.uv[2] * bc_coord[2]) };
-						
-						// pixel processing
-						psin.view_pos = interp_view_pos;
-						psin.view_normal = interp_view_normal;
-						psin.uv = interp_uv;
-						auto result_color = PixelShader(psin);
+							// interp attribute
 
+							float w = 1.0f / (vso.pos[0].w * bc_coord[0] + vso.pos[1].w * bc_coord[1] + vso.pos[2].w * bc_coord[2]);
+							//std::cout << w << "\n";
+							glm::vec3 interp_view_normal{ w * (vso.view_normal[0] * bc_coord[0] + vso.view_normal[1] * bc_coord[1] + vso.view_normal[2] * bc_coord[2]) };
+							glm::vec3 interp_view_pos{ w * (vso.view_pos[0] * bc_coord[0] + vso.view_pos[1] * bc_coord[1] + vso.view_pos[2] * bc_coord[2]) };
+							glm::vec2 interp_uv = { w * (vso.uv[0] * bc_coord[0] + vso.uv[1] * bc_coord[1] + vso.uv[2] * bc_coord[2]) };
 
-						//clamp to 0,1
-						result_color[0] = result_color[0] > 1.0f ? 1.0f : result_color[0];
-						result_color[1] = result_color[1] > 1.0f ? 1.0f : result_color[1];
-						result_color[2] = result_color[2] > 1.0f ? 1.0f : result_color[2];
-						std::array<unsigned char, 3> res{
-							static_cast<unsigned char>(result_color[0] * 255), 
-							static_cast<unsigned char>(result_color[1] * 255),
-							static_cast<unsigned char>(result_color[2] * 255)};
-						
-						
-						//if (result_color[0] > 255|| result_color[1] > 255|| result_color[2] > 255)std::cout << "test";
-						SetPixel(i, j, res);
+							// pixel processing
+							psin.view_pos = interp_view_pos;
+							psin.view_normal = interp_view_normal;
+							psin.uv = interp_uv;
+							auto result_color = PixelShader(psin);
+							SetPixel(i, j, result_color);
+
+						}
 					}
+
 				}
-			}
+			
 		}
 	}
 
@@ -235,7 +229,7 @@ private:
 		}
 	}
 
-	std::array<float, 3> ComputeBC(float x, float y, std::array<glm::vec4, 3> tri)
+	glm::vec3 ComputeBC(float x, float y, std::array<glm::vec4, 3> tri)
 	{
 		glm::vec2 v0{ tri[1] - tri[0] };			  //b-a
 		glm::vec2 v1{ tri[2] - tri[0] };			  //c-a
@@ -252,17 +246,18 @@ private:
 		float w = (d00 * d21 - d01 * d20) / denom;
 		float u = 1.0f - v - w;
 
-		return std::array<float, 3>{u,v, w};
+		return {u, v, w};
 
 
 
 	}
 
-	void SetPixel(uint32_t x, uint32_t y, std::array<unsigned char, 3> color)
+	void SetPixel(uint32_t x, uint32_t y, glm::vec3 color)
 	{
-		color_buffer[3 * (y * width + x) + 0] = color[0];
-		color_buffer[3 * (y * width + x) + 1] = color[1];
-		color_buffer[3 * (y * width + x) + 2] = color[2];
+		if (x > width || y > height)return;
+		color_buffer[3 * (y * width + x) + 0] = static_cast<char>(255 * color[0]);
+		color_buffer[3 * (y * width + x) + 1] = static_cast<char>(255 * color[1]);
+		color_buffer[3 * (y * width + x) + 2] = static_cast<char>(255 * color[2]);
 	}
 
 private:
@@ -272,7 +267,7 @@ private:
 	glm::mat4 view{}, projection{};
 	std::vector<Model> models{};
 	// pos, dir, color
-	//DirectLight light{ glm::vec4{0.0f,1.0f,-1.0f,1.0f}, glm::vec4(0.0f,-0.3f,-1.0f,0.0f),2.0f*glm::vec3(1.0f,0.956f,0.8392f) };
-	PointLight plight{ glm::vec4(0.0f,5.0f,5.0f,1.0f),glm::vec3(1.0f,0.956f,0.8392f) };
+	DirectLight light{ glm::vec4(0.0f,-0.3f,-1.0f,0.0f),2.0f * glm::vec3(1.0f,0.956f,0.8392f) };
+	//PointLight plight{ glm::vec4(0.0f,5.0f,2.0f,1.0f),glm::vec3(1.0f,0.956f,0.8392f) };
 	uint32_t  face_count{ 0 }, face_culled{ 0 };
 };
