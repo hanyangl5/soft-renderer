@@ -2,7 +2,6 @@
 
 #include <array>
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <vector>
@@ -16,20 +15,6 @@
 #include "Model.h"
 #include "ShaderStage.h"
 #include "config.hpp"
-
-template <typename T> struct atomwrapper {
-    std::atomic<T> _a;
-
-    atomwrapper() : _a() {}
-
-    atomwrapper(atomwrapper &&) = delete;
-    atomwrapper &operator=(atomwrapper &&) = delete;
-    explicit atomwrapper(const std::atomic<T> &a) : _a(a.load()) {}
-
-    atomwrapper(const atomwrapper &other) : _a(other._a.load()) {}
-
-    atomwrapper &operator=(const atomwrapper &other) { _a.store(other._a.load()); }
-};
 
 class Pipeline {
   public:
