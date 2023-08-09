@@ -17,8 +17,7 @@
 #include "ShaderStage.h"
 #include "config.hpp"
 
-template <typename T>
-struct atomwrapper {
+template <typename T> struct atomwrapper {
     std::atomic<T> _a;
 
     atomwrapper() : _a() {}

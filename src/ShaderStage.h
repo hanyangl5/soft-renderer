@@ -43,5 +43,5 @@ struct ps_input {
     glm::vec2 uv{};
 };
 
-vs_output VertexShader(const vs_input &vsin, shader_resource& resource);
+vs_output VertexShader(const vs_input &vsin, shader_resource &resource);
 glm::vec3 PixelShader(const ps_input &psin, shader_resource &resource);
