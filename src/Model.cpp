@@ -45,5 +45,5 @@ void Model::SetModelMat(const glm::mat4 &t) { translate = t; }
 glm::mat4 &Model::GetModelMat() { return translate; }
 
 uint32_t Model::GetTriangleCount() { return static_cast<uint32_t>(triangle_list.size()); }
-std::shared_ptr<Texture> &Model::GetTexture() { return texture; }
-void Model::BindTexture(const std::string &path) { texture = std::make_shared<Texture>(path); }
+std::shared_ptr<Texture> &Model::GetAlbedoMap() { return albedo; }
+void Model::BindAlbedoMap(const std::string &path) { albedo = std::make_shared<Texture>(path); }

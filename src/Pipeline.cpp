@@ -19,32 +19,14 @@ void Pipeline::InitAsset() {
     projection = glm::perspective(glm::radians(90.0f), static_cast<float>(width) / height, 0.1f, 100.0f);
     glm::mat4 id(1.0f);
 
-    //Model plane("../resources/model/plane/plane.obj");
-    //plane.BindTexture("../resources/model/plane/container.jpg");
-    //glm::mat4 plane_t{ glm::translate(id, glm::vec3(1.0f, -2.0f, 0.0f)) };
-    //plane.SetModelMat(plane_t);
-
-    //Model backpack("../resources/model/backpack/backpack.obj");
-    //backpack.BindTexture("../resources/model/backpack/diffuse.jpg");
     auto backpack_path = asset_path / "backpack/backpack.obj";
-    auto backpack_diffuse_path = asset_path / "backpack/diffuse.jpg";
+    auto backpack_albedo_path = asset_path / "backpack/diffuse.jpg";
     Model backpack(backpack_path.string());
-    backpack.BindTexture(backpack_diffuse_path.string());
+    backpack.BindAlbedoMap(backpack_albedo_path.string());
     glm::mat4 backpack_t{glm::translate(id, glm::vec3(4.0f, 0.0f, 0.0f))};
-    //backpack_t = { glm::scale(backpack_t,glm::vec3(0.5,0.5,0.5)) };
     backpack.SetModelMat(backpack_t);
 
-    //Model crate("../resources/model/Crate/crate_tri.obj");
-    //crate.BindTexture("../resources/model/Crate/crate_1.jpg");
-    //crate.SetModelMat(glm::translate(id, glm::vec3(0.0f, 2.0f, 0.0f)));
-
-    //Model sphere("../resources/model/sphere/sphere.obj");
-    //sphere.BindTexture("../resources/model/sphere/rustediron2_basecolor.png");
-
-    //models.push_back(plane);
-    //models.push_back(crate);
     models.push_back(backpack);
-    //models.push_back(sphere);
     for (auto model : models) {
         face_count += model.GetTriangleCount();
     }
@@ -59,131 +41,55 @@ void Pipeline::Update(const std::shared_ptr<Camera> &cam, float delta_time) {
     light.Transform(rot);
     //plight.SetRot(rot);
 
-    //glm::mat4 rot_plane{ glm::rotate(models[0].GetModelMat(), glm::radians(1000.0f * 0.2f * delta_time), glm::vec3(0.0, 1.0, 0.0)) };
+    glm::mat4 rot_plane{
+        glm::rotate(models[0].GetModelMat(), glm::radians(1000.0f * 0.2f * delta_time), glm::vec3(0.0, 1.0, 0.0))};
 
     //models[0].SetModelMat(rot_plane);
 
-    //glm::mat4 rot_crate{ glm::rotate(models[1].GetModelMat(), glm::radians( 1000.0f*0.1f* delta_time), glm::vec3(1.0, 0.0, 0.0)) };
-    //models[1].SetModelMat(rot_crate);
-    //models[2].SetModelMat(rot_crate);
+    resource.eye_pos = cam->Position;
+    resource.view = view;
+
+    resource.light_color = light.Color();
+    //psin.view_light_pos = view * plight.Pos();
+    resource.light_dir_ws = light.Dir();
 }
 
 void Pipeline::Render() {
-    vs_input vsin{};
-    vsin.view = view;
-    ps_input psin{};
-    psin.light_color = light.Color();
-    //psin.view_light_pos = view * plight.Pos();
-    psin.view_light_dir = view * light.Dir();
 
+    vs_input vsin{};
+    ps_input psin{};
     for (auto &single_model : models) {
 
-        vsin.model = single_model.GetModelMat();
+        resource.model = single_model.GetModelMat();
         //std::cout << vsin.model[0][0]<<"\n";
         glm::mat4 mvp = projection * view * single_model.GetModelMat();
-        vsin.mvp = mvp;
-        psin.texture = single_model.GetTexture();
+        resource.mvp = mvp;
+        resource.albedo = single_model.GetAlbedoMap();
         auto &tri_list = single_model.GetTriangleList();
-#if 0
-        uint32_t tri_count_per_thread = tri_list.size() / max_thread_count;
-        std::vector<std::thread> threads;
+        for (auto &y : tri_list) {
+            // input assembly
+            vsin.vertex = {y.GetPos(0), y.GetPos(1), y.GetPos(2)};
+            vsin.normal = {y.GetNormal(0), y.GetNormal(1), y.GetNormal(2)};
+            vsin.uv = {y.GetTexcoord(0), y.GetTexcoord(1), y.GetTexcoord(2)};
 
-        for (uint32_t group_index = 0; group_index < max_thread_count; group_index++) {
-            auto func = [&](uint32_t group_idx) {
-                for (uint32_t gourp_thread_index = 0; gourp_thread_index < tri_count_per_thread; gourp_thread_index++) {
-                    uint32_t y = group_idx * tri_count_per_thread + gourp_thread_index;
-
-                    vsin.vertex = {tri_list[y].GetPos(0), tri_list[y].GetPos(1), tri_list[y].GetPos(2)};
-                    vsin.normal = {tri_list[y].GetNormal(0), tri_list[y].GetNormal(1), tri_list[y].GetNormal(2)};
-                    vsin.uv = {tri_list[y].GetTexcoord(0), tri_list[y].GetTexcoord(1), tri_list[y].GetTexcoord(2)};
-
-                    // model space to clip space
-                    vs_output vso{VertexShader(vsin)};
-                    // clipping
-                    if (!Clipping(vso))
-                        continue;
-                    // clip to ndc
-                    PerspectiveDivision(vso);
-                    if (!CullBackFace(vso))
-                        continue;
-                    // viewport transformation
-                    ScreenMapping(vso);
-                    PerspectiveCorrection(vso);
-
-                    // rasterize and pixel processing
-
-                    int32_t max_x = std::max({vso.pos[0].x, vso.pos[1].x, vso.pos[2].x});
-                    int32_t max_y = std::max({vso.pos[0].y, vso.pos[1].y, vso.pos[2].y});
-                    int32_t min_x = std::min({vso.pos[0].x, vso.pos[1].x, vso.pos[2].x});
-                    int32_t min_y = std::min({vso.pos[0].y, vso.pos[1].y, vso.pos[2].y});
-
-                    for (int32_t i = min_x; i <= max_x; ++i) {
-                        for (int32_t j = min_y; j <= max_y; ++j) {
-
-                            glm::vec3 bc_coord{ComputeBC(i + 0.5, j + 0.5, vso.pos)};
-
-                            if (bc_coord[0] < 0 || bc_coord[1] < 0 || bc_coord[2] < 0)
-                                continue; // not inside the triangle
-
-                            float zp{bc_coord[0] * vso.pos[0].z + bc_coord[1] * vso.pos[1].z +
-                                     bc_coord[2] * vso.pos[2].z};
-                            if (zp < depth_buffer_atomic[j * width + i].load(std::memory_order_seq_cst)) {
-                                //this->depth_buffer_atomic[j * width + i].store(zp); // depth write
-                                this->depth_buffer_atomic[j * width + i].exchange(zp, std::memory_order_seq_cst);
-                            } else {
-                                continue;
-                            }
-                            
-
-                            // interp attribute
-
-                            float w = 1.0f / (vso.pos[0].w * bc_coord[0] + vso.pos[1].w * bc_coord[1] +
-                                              vso.pos[2].w * bc_coord[2]);
-                            //std::cout << w << "\n";
-                            glm::vec3 interp_view_normal{w * (vso.view_normal[0] * bc_coord[0] +
-                                                              vso.view_normal[1] * bc_coord[1] +
-                                                              vso.view_normal[2] * bc_coord[2])};
-                            glm::vec3 interp_view_pos{w *
-                                                      (vso.view_pos[0] * bc_coord[0] + vso.view_pos[1] * bc_coord[1] +
-                                                       vso.view_pos[2] * bc_coord[2])};
-                            glm::vec2 interp_uv = {
-                                w * (vso.uv[0] * bc_coord[0] + vso.uv[1] * bc_coord[1] + vso.uv[2] * bc_coord[2])};
-
-                            // pixel processing
-                            psin.view_pos = interp_view_pos;
-                            psin.view_normal = interp_view_normal;
-                            psin.uv = interp_uv;
-                            auto result_color = glm::vec3(1.0);
-                            SetPixel(i, j, result_color);
-                        }
-                    }
-                }
-            };
-            std::thread t(func, group_index);
-            threads.push_back(std::move(t));
-        }
-        for (auto &t : threads) {
-            t.join();
-        }
-#endif
-
-        for (int32_t y = 0; y < tri_list.size(); y++) {
-
-            vsin.vertex = {tri_list[y].GetPos(0), tri_list[y].GetPos(1), tri_list[y].GetPos(2)};
-            vsin.normal = {tri_list[y].GetNormal(0), tri_list[y].GetNormal(1), tri_list[y].GetNormal(2)};
-            vsin.uv = {tri_list[y].GetTexcoord(0), tri_list[y].GetTexcoord(1), tri_list[y].GetTexcoord(2)};
-
+            // vertex shader
             // model space to clip space
-            vs_output vso{VertexShader(vsin)};
+            vs_output vso = VertexShader(vsin, resource);
+
             // clipping
-            if (!Clipping(vso))
+            if (!Clipping(vso)) {
                 continue;
+            }
+
             // clip to ndc
             PerspectiveDivision(vso);
-            if (!CullBackFace(vso))
+
+            if (!CullBackFace(vso)) {
                 continue;
+            }
             // viewport transformation
             ScreenMapping(vso);
+
             PerspectiveCorrection(vso);
 
             // rasterize and pixel processing
@@ -193,17 +99,26 @@ void Pipeline::Render() {
             int32_t min_x = std::min({vso.pos[0].x, vso.pos[1].x, vso.pos[2].x});
             int32_t min_y = std::min({vso.pos[0].y, vso.pos[1].y, vso.pos[2].y});
 
+            //std::vector<> threads;
             for (int32_t i = min_x; i <= max_x; ++i) {
+                if (i > width || i < 0) {
+                    continue;
+                }
                 for (int32_t j = min_y; j <= max_y; ++j) {
+                    if (j > height || j < 0) {
+                        continue;
+                    }
 
                     glm::vec3 bc_coord{ComputeBC(i + 0.5, j + 0.5, vso.pos)};
 
-                    if (bc_coord[0] < 0 || bc_coord[1] < 0 || bc_coord[2] < 0)
+                    if (bc_coord[0] < 0 || bc_coord[1] < 0 || bc_coord[2] < 0) {
                         continue; // not inside the triangle
+                    }
 
                     float zp{bc_coord[0] * vso.pos[0].z + bc_coord[1] * vso.pos[1].z + bc_coord[2] * vso.pos[2].z};
-                    if (zp > depth_buffer[j * width + i])
-                        continue;                           // depth test
+                    if (zp > depth_buffer[j * width + i]) {
+                        continue; // depth test
+                    }
                     this->depth_buffer[j * width + i] = zp; // depth write
 
                     // interp attribute
@@ -211,19 +126,18 @@ void Pipeline::Render() {
                     float w =
                         1.0f / (vso.pos[0].w * bc_coord[0] + vso.pos[1].w * bc_coord[1] + vso.pos[2].w * bc_coord[2]);
                     //std::cout << w << "\n";
-                    glm::vec3 interp_view_normal{w *
-                                                 (vso.view_normal[0] * bc_coord[0] + vso.view_normal[1] * bc_coord[1] +
-                                                  vso.view_normal[2] * bc_coord[2])};
-                    glm::vec3 interp_view_pos{w * (vso.view_pos[0] * bc_coord[0] + vso.view_pos[1] * bc_coord[1] +
-                                                   vso.view_pos[2] * bc_coord[2])};
+                    glm::vec3 interp_normal_ws{w * (vso.normal_ws[0] * bc_coord[0] + vso.normal_ws[1] * bc_coord[1] +
+                                                    vso.normal_ws[2] * bc_coord[2])};
+                    glm::vec3 interp_pos_ws{
+                        w * (vso.pos_ws[0] * bc_coord[0] + vso.pos_ws[1] * bc_coord[1] + vso.pos_ws[2] * bc_coord[2])};
                     glm::vec2 interp_uv = {
                         w * (vso.uv[0] * bc_coord[0] + vso.uv[1] * bc_coord[1] + vso.uv[2] * bc_coord[2])};
 
                     // pixel processing
-                    psin.view_pos = interp_view_pos;
-                    psin.view_normal = interp_view_normal;
+                    psin.pos_ws = interp_pos_ws;
+                    psin.normal_ws = interp_normal_ws;
                     psin.uv = interp_uv;
-                    auto result_color = PixelShader(psin);
+                    auto result_color = PixelShader(psin, resource);
                     SetPixel(i, j, result_color);
                 }
             }
@@ -236,7 +150,6 @@ void Pipeline::Clear() {
     std::fill(depth_buffer.begin(), depth_buffer.end(), 1.0f);
 }
 void *Pipeline::GetColorBuffer() { return color_buffer.data(); }
-//auto GetInfo() { return face_count, face_culled; }
 
 bool Pipeline::CullBackFace(const vs_output &vso) {
 
@@ -253,11 +166,11 @@ bool Pipeline::CullBackFace(const vs_output &vso) {
     }
     return true;
 }
-bool Pipeline::Clipping(const vs_output &vso) {
 
+bool Pipeline::Clipping(vs_output &vso) {
     for (const auto &i : vso.pos) {
         // check the triangle is inside the frustum
-        if (i.x > i.w || i.x < -i.w || i.y > i.w || i.y < -i.w || i.z > i.w || i.z < -i.w) {
+        if (i.x > i.w && i.x < -i.w && i.y > i.w && i.y < -i.w && i.z > i.w && i.z < -i.w) {
             return false;
         }
     }
@@ -280,8 +193,8 @@ void Pipeline::ScreenMapping(vs_output &vso) {
 void Pipeline::PerspectiveCorrection(vs_output &vso) {
 
     for (uint32_t i = 0; i < 3; ++i) {
-        vso.view_normal[i] /= vso.pos[i].w;
-        vso.view_pos[i] /= vso.pos[i].w;
+        vso.normal_ws[i] /= vso.pos[i].w;
+        vso.pos_ws[i] /= vso.pos[i].w;
         vso.uv[i] /= vso.pos[i].w;
         vso.pos[i].w = 1.0f / vso.pos[i].w;
     }

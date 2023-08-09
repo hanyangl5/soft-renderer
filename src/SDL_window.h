@@ -155,8 +155,8 @@ class Window {
     bool first_mouse{true};
     std::string window_title{};
     // input handling
-    uint32_t lastX{static_cast<uint32_t>(width / 2.0f)};
-    uint32_t lastY{static_cast<uint32_t>(height / 2.0f)};
+    uint32_t lastX{};
+    uint32_t lastY{};
     int cursor_x{}, cursor_y{};
 
     // camera

@@ -1,1 +1,1 @@
-#define ASSET_DIR "C:/hanyanglu/soft-renderer/resources"
+#define ASSET_DIR "/Users/hyl5/codes/soft-renderer/resources"

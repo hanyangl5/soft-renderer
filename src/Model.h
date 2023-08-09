@@ -19,11 +19,11 @@ class Model {
     glm::mat4 &GetModelMat();
 
     uint32_t GetTriangleCount();
-    std::shared_ptr<Texture> &GetTexture();
-    void BindTexture(const std::string &path);
+    std::shared_ptr<Texture> &GetAlbedoMap();
+    void BindAlbedoMap(const std::string &path);
 
   private:
-    std::shared_ptr<Texture> texture{}; // only 1 texture
+    std::shared_ptr<Texture> albedo{}; // only 1 texture
     std::vector<Triangle> triangle_list{};
     glm::mat4 translate{glm::mat4(1.0f)};
 };

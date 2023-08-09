@@ -21,7 +21,7 @@ Texture::Texture(const std::string &path) : path(path) {
     color_data.assign(data, data + width * height * 4);
 }
 
-glm::vec3 Texture::GetColor(const glm::vec2 &uv) {
+glm::vec3 Texture::Sample(const glm::vec2 &uv) {
     // model does not have texture
     if (color_data.empty()) {
         return {1.0, 1.0, 1.0};

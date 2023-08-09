@@ -2,6 +2,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <vector>
@@ -16,14 +17,29 @@
 #include "ShaderStage.h"
 #include "config.hpp"
 
+template <typename T>
+struct atomwrapper {
+    std::atomic<T> _a;
+
+    atomwrapper() : _a() {}
+
+    atomwrapper(atomwrapper &&) = delete;
+    atomwrapper &operator=(atomwrapper &&) = delete;
+    explicit atomwrapper(const std::atomic<T> &a) : _a(a.load()) {}
+
+    atomwrapper(const atomwrapper &other) : _a(other._a.load()) {}
+
+    atomwrapper &operator=(const atomwrapper &other) { _a.store(other._a.load()); }
+};
+
 class Pipeline {
   public:
     Pipeline(uint32_t w, uint32_t h);
     ~Pipeline() = default;
 
-    Pipeline(const Pipeline &) = default;
+    Pipeline(const Pipeline &) = delete;
     Pipeline(Pipeline &&) = delete;
-    Pipeline &operator=(const Pipeline &) = default;
+    Pipeline &operator=(const Pipeline &) = delete;
     Pipeline &operator=(Pipeline &&) = delete;
 
     void InitAsset();
@@ -35,7 +51,7 @@ class Pipeline {
 
   private:
     bool CullBackFace(const vs_output &vso);
-    bool Clipping(const vs_output &vso);
+    bool Clipping(vs_output &vso);
     void PerspectiveDivision(vs_output &vso);
     void ScreenMapping(vs_output &vso);
     void PerspectiveCorrection(vs_output &vso);
@@ -44,6 +60,7 @@ class Pipeline {
 
     void SetPixel(uint32_t x, uint32_t y, const glm::vec3 &color);
 
+    shader_resource resource;
     uint32_t width{}, height{};
     std::vector<unsigned char> color_buffer{};
     std::vector<float> depth_buffer{};
