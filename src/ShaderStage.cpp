@@ -32,7 +32,7 @@ glm::vec3 PixelShader(const ps_input &psin) {
 
     glm::vec3 diff{kd * albedo * light_color * std::max(glm::dot(view_light_dir, psin.view_normal), 0.0f)};
 
-    glm::vec3 spec{ks * light_color * std::powf(std::max(glm::dot(half_dir, psin.view_normal), 0.0f), 64)};
+    glm::vec3 spec{ks * light_color * powf(std::max(glm::dot(half_dir, psin.view_normal), 0.0f), 64)};
 
     glm::vec3 ret = ambient + diff + spec;
     //ret = glm::vec3(1.0f);
