@@ -1,10 +1,10 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <vector>
-#include <atomic>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -16,12 +16,11 @@
 #include "ShaderStage.h"
 #include "config.hpp"
 
-
 class Pipeline {
   public:
     Pipeline(uint32_t w, uint32_t h);
     ~Pipeline() = default;
-    
+
     Pipeline(const Pipeline &) = default;
     Pipeline(Pipeline &&) = delete;
     Pipeline &operator=(const Pipeline &) = default;

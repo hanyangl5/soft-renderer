@@ -9,7 +9,7 @@ class Texture {
   public:
     Texture(const std::string &path);
 
-    glm::vec3 GetColor(const glm::vec2& uv);
+    glm::vec3 GetColor(const glm::vec2 &uv);
 
   private:
     int width, height, channels;
