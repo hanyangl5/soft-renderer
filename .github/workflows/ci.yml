@@ -16,14 +16,14 @@ jobs:
 
       matrix:
         os:
-          #- ubuntu-20.04
           - windows-2022
+          - ubuntu-20.04
+          - macos-10.15
         arch: [x64]
         cxx: [cxx17]
-        toolchain: [msvc]
+        toolchain: [msvc, llvm, gcc]
         build_type:
           - Release
-          - Debug
 
     steps:
       - name: Check for llvm version mismatches
