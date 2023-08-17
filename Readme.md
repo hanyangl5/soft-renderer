@@ -1,7 +1,5 @@
 # Soft Renderer
 
-[![ci](https://github.com/hanyangl5/soft-renderer/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/hanyangl5/soft-renderer/actions/workflows/ci.yml)
-
 Soft Renderer is a cross-platform implementation of the GPU rendering pipeline on CPU.
 
 ![](figs/output_224.png)
