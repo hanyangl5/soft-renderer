@@ -19,8 +19,8 @@ jobs:
           - macos-latest
           - windows-latest
         compiler:
-          - llvm-latest
-          - gcc-latest
+          - llvm-16
+          - gcc-13
         generator:
           - "Ninja Multi-Config"
         build_type:
